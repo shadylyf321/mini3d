@@ -1,0 +1,11 @@
+﻿  mini3d.c
+d:\mini3d-master\mini3d-master\mini3d.c : warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+d:\mini3d-master\mini3d-master\mini3d.c(39): warning C4244: “return”: 从“float”转换到“int”，可能丢失数据
+d:\mini3d-master\mini3d-master\mini3d.c(618): warning C4244: “函数”: 从“float”转换到“int”，可能丢失数据
+d:\mini3d-master\mini3d-master\mini3d.c(619): warning C4244: “函数”: 从“float”转换到“int”，可能丢失数据
+d:\mini3d-master\mini3d-master\mini3d.c(620): warning C4244: “函数”: 从“float”转换到“int”，可能丢失数据
+d:\mini3d-master\mini3d-master\mini3d.c(621): warning C4244: “函数”: 从“float”转换到“int”，可能丢失数据
+d:\mini3d-master\mini3d-master\mini3d.c(613): warning C4244: “初始化”: 从“double”转换到“float”，可能丢失数据
+d:\mini3d-master\mini3d-master\mini3d.c(614): warning C4244: “初始化”: 从“double”转换到“float”，可能丢失数据
+  Mini3D.vcxproj -> D:\mini3d-master\mini3d-master\Debug\Mini3D.exe
+  Mini3D.vcxproj -> D:\mini3d-master\mini3d-master\Debug\Mini3D.pdb (Full PDB)
