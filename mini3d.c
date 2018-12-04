@@ -306,7 +306,26 @@ void transform_homogenize(const transform_t *ts, vector_t *y, const vector_t *x)
 //=====================================================================
 typedef struct { float r, g, b; } color_t;
 typedef struct { float u, v; } texcoord_t;
-typedef struct { point_t pos; texcoord_t tc; color_t color; float rhw; } vertex_t;
+typedef struct { point_t pos; texcoord_t tc; color_t color; vector_t normal, float rhw; } vertex_t;
+
+//normal来自模型的tangentspace ((r)0,(g)0,(b)1)法线贴图基本都是蓝色
+typedef struct
+{
+	vertex_t pos;
+	color_t color;
+	vector_t normal;
+	texcoord_t tex;
+}appdata;
+
+//struct to fragment 需要计算得到worldSpace的normal，在fragment阶段做光照计算
+typedef struct
+{
+	vector_t pos;
+	texcoord_t tex;
+	color_t color;
+	vector_t normal;
+	vector_t tangent;
+}v2f;
 
 typedef struct { vertex_t v, v1, v2; } edge_t;
 typedef struct { float top, bottom; edge_t left, right; } trapezoid_t;
@@ -446,6 +465,24 @@ void trapezoid_init_scan_line(const trapezoid_t *trap, scanline_t *scanline, int
 	vertex_division(&scanline->step, &trap->left.v, &trap->right.v, width);
 }
 
+//math from https://blog.csdn.net/bonchoix/article/details/8619624
+//计算顶点切空间坐标系,对切空间法向量转换
+void CalculateTangent(vector_t *tangent, vector_t p0, vector_t p1, vector_t p2,
+	float u0, float v0, float u1, float v1, float u2, float v2)
+{
+	vector_t* p01, p02;
+	vector_sub(&p01, &p1, &p0);
+	vector_sub(&p02, &p2, &p0);
+	float b1 = v1 - v0;
+	float b2 = v2 - v0;
+	float t1 = u1 - u0;
+	float t2 = u2 - u0;
+	float m = t1*b2 - t2*b1;
+	tangent->x = m * (b2 * p01->x - b1 p02.x);
+	tangent->y = m * (b2 * p01->y - b1 p02.y);
+	tangent->z = m * (b2 * p01->z - b1 p02.z);
+	tangent->w = 1;//TODO:考虑放向
+}
 
 //=====================================================================
 // 渲染设备
