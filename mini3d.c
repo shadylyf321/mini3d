@@ -60,6 +60,12 @@ void vector_sub(vector_t *z, const vector_t *x, const vector_t *y) {
 	z->w = 1.0;
 }
 
+void vector_div(vector_t * z, const vector_t * x, float div)
+{
+	z->x = x->x / div;
+	z->y = x->y / div;
+	z->z = x->z / div;
+}
 // 矢量点乘
 float vector_dotproduct(const vector_t *x, const vector_t *y) {
 	return x->x * y->x + x->y * y->y + x->z * y->z;
@@ -242,6 +248,99 @@ void matrix_set_perspective(matrix_t *m, float fovy, float aspect, float zn, flo
 	m->m[2][3] = 1;
 }
 
+void matrix_clone(matrix_t *dest, const matrix_t *src) {
+	int i, j;
+	for (i = 0; i < 4; i++)
+		for (j = 0; j < 4; j++)
+			dest->m[i][j] = src->m[i][j];
+}
+
+//求逆矩阵
+void matrix_inverse(matrix_t *m) {
+	float t[3][6];
+	int i, j, k;
+	float f;
+
+	for (i = 0; i < 3; i++)
+		for (j = 0; j < 6; j++) {
+			if (j < 3)
+				t[i][j] = m->m[i][j];
+			else if (j == i + 3)
+				t[i][j] = 1;
+			else
+				t[i][j] = 0;
+		}
+
+	for (i = 0; i < 3; i++) {
+		f = t[i][i];
+		for (j = 0; j < 6; j++)
+			t[i][j] /= f;
+		for (j = 0; j < 3; j++) {
+			if (j != i) {
+				f = t[j][i];
+				for (k = 0; k < 6; k++)
+					t[j][k] = t[j][k] - t[i][k] * f;
+			}
+		}
+	}
+
+	for (i = 0; i < 3; i++)
+		for (j = 3; j < 6; j++)
+			m->m[i][j - 3] = t[i][j];
+
+	m->m[3][0] = -m->m[3][0];
+	m->m[3][1] = -m->m[3][1];
+	m->m[3][2] = -m->m[3][2];
+}
+
+// 求4x4 矩阵的逆矩阵
+int matrix_inverse2(matrix_t *m)
+{
+	// 矩阵的行列式
+	double det = (m->m[0][0] * (m->m[1][1]* m->m[2][2] - m->m[1][2] * m->m[2][1]) -
+		m->m[0][1] * (m->m[1][0] * m->m[2][2] - m->m[1][2] * m->m[2][0]) +
+		m->m[0][2] * (m->m[1][0] * m->m[2][1] - m->m[1][1] *m->m[2][0]));
+
+	// 先判断行列式是否为0。
+	if (abs(det) < 0.001)
+		return 0;
+
+	double det_inv = 1.0 / det;
+
+	mi->M00 = det_inv * (m->M11 * m->M22 - m->M12 * m->M21);
+	mi->M01 = -det_inv * (m->M01 * m->M22 - m->M02 * m->M21);
+	mi->M02 = det_inv * (m->M01 * m->M12 - m->M02 * m->M11);
+	mi->M03 = 0.0;
+
+	mi->M10 = -det_inv * (m->M10 * m->M22 - m->M12 * m->M20);
+	mi->M11 = det_inv * (m->M00 * m->M22 - m->M02 * m->M20);
+	mi->M12 = -det_inv * (m->M00 * m->M12 - m->M02 * m->M10);
+	mi->M13 = 0.0;
+
+	mi->M20 = det_inv * (m->M10 * m->M21 - m->M11 * m->M20);
+	mi->M21 = -det_inv * (m->M00 * m->M21 - m->M01 * m->M20);
+	mi->M22 = det_inv * (m->M00 * m->M11 - m->M01 * m->M10);
+	mi->M23 = 0.0;
+
+	mi->M30 = -(m->M30 * mi->M00 + m->M31 * mi->M10 + m->M32 * mi->M20);
+	mi->M31 = -(m->M30 * mi->M01 + m->M31 * mi->M11 + m->M32 * mi->M21);
+	mi->M32 = -(m->M30 * mi->M02 + m->M31 * mi->M12 + m->M32 * mi->M22);
+	mi->M33 = 1.0;
+
+	return 1;
+}
+
+//矩阵的转置
+void matrix_transpose(matrix_t *m) {
+	for (int i = 0; i < 3; i++)
+		for (int j = i + 1; j < 3; j++)
+		{
+			float temp = m->m[i][j];
+			m->m[i][j] = m->m[j][i];
+			m->m[j][i] = temp;
+		}
+}
+
 
 //=====================================================================
 // 坐标变换
@@ -251,6 +350,8 @@ typedef struct {
 	matrix_t view;          // 摄影机坐标变换
 	matrix_t projection;    // 投影变换
 	matrix_t transform;     // transform = world * view * projection
+	matrix_t vp;			// view * projection
+	matrix_t vp_reverse;    // vp逆矩阵
 	float w, h;             // 屏幕大小
 }	transform_t;
 
@@ -260,6 +361,9 @@ void transform_update(transform_t *ts) {
 	matrix_t m;
 	matrix_mul(&m, &ts->world, &ts->view);
 	matrix_mul(&ts->transform, &m, &ts->projection);
+	matrix_mul(&ts->vp, &ts->view, &ts->projection);
+	matrix_clone(&ts->vp_reverse, &ts->vp);
+	matrix_inverse(&ts->vp_reverse);
 }
 
 // 初始化，设置屏幕长宽
@@ -300,6 +404,13 @@ void transform_homogenize(const transform_t *ts, vector_t *y, const vector_t *x)
 	y->w = 1.0f;
 }
 
+void transform_homogenize_reverse(vector_t *y, const vector_t *x, float width, float height) {
+	y->x = (x->x * 2 / width - 1.0f) * x->w;
+	y->y = (1.0f - x->y * 2 / height) * x->w;
+	y->z = x->z * x->w;
+	y->w = x->w;
+}
+
 
 //=====================================================================
 // 几何计算：顶点、扫描线、边缘、矩形、步长计算
@@ -307,6 +418,16 @@ void transform_homogenize(const transform_t *ts, vector_t *y, const vector_t *x)
 typedef struct { float r, g, b; } color_t;
 typedef struct { float u, v; } texcoord_t;
 typedef struct { point_t pos; texcoord_t tc; color_t color; vector_t normal; float rhw; } vertex_t;
+typedef struct
+{
+	vector_t position;
+	color_t color;
+} light_t;
+
+light_t Light = {
+	{5,1,2,1},
+	{255, 255, 255}
+};
 
 //normal来自模型的tangentspace ((r)0,(g)0,(b)1)法线贴图基本都是蓝色
 typedef struct
@@ -341,9 +462,17 @@ void vertex_rhw_init(vertex_t *v) {
 	v->color.g *= rhw;
 	v->color.b *= rhw;
 }
+//顶点法向量变换 变换矩阵逆矩阵的转置
+void vertex_normal_transform(vertex_t * v, matrix_t * transform)
+{
+	matrix_inverse(&transform);
+	matrix_transpose(&transform);
+	matrix_apply(&v->normal, &v->normal, &transform);
+}
 
 void vertex_interp(vertex_t *y, const vertex_t *x1, const vertex_t *x2, float t) {
 	vector_interp(&y->pos, &x1->pos, &x2->pos, t);
+	vector_interp(&y->normal, &x1->normal, &x2->normal, t);
 	y->tc.u = interp(x1->tc.u, x2->tc.u, t);
 	y->tc.v = interp(x1->tc.v, x2->tc.v, t);
 	y->color.r = interp(x1->color.r, x2->color.r, t);
@@ -502,6 +631,7 @@ typedef struct {
 	int render_state;           // 渲染状态
 	IUINT32 background;         // 背景颜色
 	IUINT32 foreground;         // 线框颜色
+	point_t CameraPos;
 }	device_t;
 
 #define RENDER_STATE_WIREFRAME      1		// 渲染线框
@@ -685,6 +815,81 @@ IUINT32 device_texture_read(const device_t *device, float u, float v) {
 	return device->texture[y][x];
 }
 
+int color2int(const color_t col)
+{
+	return (int)(col.r * 255) << 16 |
+		(int)(col.g * 255) << 8 |
+		(int)(col.b * 255);
+}
+
+int color_mul(int col1, int col2)
+{
+	int r1 = (col1 >> 16) & 0xFF;
+	int g1 = (col1 >> 8 )& 0xFF;
+	int b1 = col1 & 0xFF;
+	int r2 = (col2 >> 16) & 0xFF;
+	int g2 = (col2 >> 8) & 0xFF;
+	int b2 = col2 & 0xFF;
+	int r = (int)((((float)r1 / 255) * ((float)r2 / 255)) * 255);
+	int g = (int)((((float)g1 / 255) * ((float)g2 / 255)) * 255);
+	int b = (int)((((float)b1 / 255) * ((float)b2 / 255)) * 255);
+	return (r << 16) | (g << 8) | b;
+}
+
+int color_mul2(int col1, float spec)
+{
+	spec = min(spec, 1);
+	int r1 = (col1 >> 16) & 0xFF;
+	int g1 = (col1 >> 8) & 0xFF;
+	int b1 = col1 & 0xFF;
+	int r = r1 * spec;
+	int g = g1 * spec;
+	int b = b1 * spec;
+	return (r << 16) | (g << 8) | b;
+}
+
+
+int color_add(int col1, int col2)
+{
+	int r1 = (col1 >> 16) & 0xFF;
+	int g1 = (col1 >> 8) & 0xFF;
+	int b1 = col1 & 0xFF;
+	int r2 = (col2 >> 16) & 0xFF;
+	int g2 = (col2 >> 8) & 0xFF;
+	int b2 = col2 & 0xFF;
+	int r = min((int)((((float)r1 / 255) + ((float)r2 / 255)) * 255), 255);
+	int g = min((int)((((float)g1 / 255) + ((float)g2 / 255)) * 255), 255);
+	int b = min((int)((((float)b1 / 255) + ((float)b2 / 255)) * 255), 255);
+	return (r << 16) | (g << 8) | b;
+}
+
+int blinPhong(const vertex_t *vertex, const light_t* light, const device_t* device, int albedo)
+{
+	vector_t* wPos;
+	vector_t* lDir;
+	vector_t* vDir;
+	transform_homogenize_reverse(&wPos, &vertex->pos, device->width, device->height);
+	matrix_apply(&wPos, &wPos, &device->transform.vp_reverse);
+	vector_t* half;
+	vector_sub(&lDir, &light->position, &wPos);
+	point_t x = device->CameraPos;
+	vector_t y = device->CameraPos;
+	vector_sub(&vDir, &device->CameraPos, &wPos);
+	vector_normalize(&lDir);
+	vector_normalize(&vDir);
+	vector_add(&half, &lDir, &vDir);
+	vector_normalize(&half);
+	float specular = 2;
+	float gloss = 1;
+	float diff = vector_dotproduct(&lDir, &vertex->normal);
+	float nh = vector_dotproduct(&half, &vertex->normal);
+	float spec = pow(nh, specular) * gloss;
+	//rgb = albeda * lightColor * diff + lightColor * spec
+	int diffcol = color_mul(albedo, color2int(light->color));
+	int speccol = color_mul2(color2int(light->color), spec);
+	return color_add(diffcol, speccol);
+}
+
 //=====================================================================
 // 渲染实现
 //=====================================================================
@@ -715,12 +920,14 @@ void device_draw_scanline(device_t *device, scanline_t *scanline) {
 					G = CMID(G, 0, 255);
 					B = CMID(B, 0, 255);
 					framebuffer[x] = (R << 16) | (G << 8) | (B);
+					framebuffer[x] = blinPhong(&scanline->v, &Light, device, framebuffer[x]);
 				}
 				if (render_state & RENDER_STATE_TEXTURE) {
 					float u = scanline->v.tc.u * w;
 					float v = scanline->v.tc.v * w;
 					IUINT32 cc = device_texture_read(device, u, v);
 					framebuffer[x] = cc;
+					framebuffer[x] = blinPhong(&scanline->v, &Light, device, framebuffer[x]);
 				}
 			}
 		}
@@ -787,6 +994,14 @@ void device_draw_primitive(device_t *device, const vertex_t *v1,
 
 		t3.pos.w = c3.w;
 		
+		//法向量变换
+		matrix_t * clone;
+		matrix_clone(&clone, &device->transform.world);
+		vertex_normal_transform(&t1, &clone);
+		vertex_normal_transform(&t2, &clone);
+		vertex_normal_transform(&t3, &clone);
+
+
 		vertex_rhw_init(&t1);	// 初始化 w
 		vertex_rhw_init(&t2);	// 初始化 w
 		vertex_rhw_init(&t3);	// 初始化 w
@@ -939,14 +1154,14 @@ void screen_update(void) {
 // 主程序
 //=====================================================================
 vertex_t mesh[8] = {
-	{ {  1, -1,  1, 1 }, { 0, 0 }, { 1.0f, 0.2f, 0.2f }, 1 },
-	{ { -1, -1,  1, 1 }, { 0, 1 }, { 0.2f, 1.0f, 0.2f }, 1 },
-	{ { -1,  1,  1, 1 }, { 1, 1 }, { 0.2f, 0.2f, 1.0f }, 1 },
-	{ {  1,  1,  1, 1 }, { 1, 0 }, { 1.0f, 0.2f, 1.0f }, 1 },
-	{ {  1, -1, -1, 1 }, { 0, 0 }, { 1.0f, 1.0f, 0.2f }, 1 },
-	{ { -1, -1, -1, 1 }, { 0, 1 }, { 0.2f, 1.0f, 1.0f }, 1 },
-	{ { -1,  1, -1, 1 }, { 1, 1 }, { 1.0f, 0.3f, 0.3f }, 1 },
-	{ {  1,  1, -1, 1 }, { 1, 0 }, { 0.2f, 1.0f, 0.3f }, 1 },
+	{ {  1, -1,  1, 1 }, { 0, 0 }, { 1.0f, 0.2f, 0.2f },{1,0,0}, 1 },
+	{ { -1, -1,  1, 1 }, { 0, 1 }, { 0.2f, 1.0f, 0.2f },{0,0,1},1 },
+	{ { -1,  1,  1, 1 }, { 1, 1 }, { 0.2f, 0.2f, 1.0f },{0,0,1},1 },
+	{ {  1,  1,  1, 1 }, { 1, 0 }, { 1.0f, 0.2f, 1.0f },{1,0,0},1 },
+	{ {  1, -1, -1, 1 }, { 0, 0 }, { 1.0f, 1.0f, 0.2f },{1,0,0}, 1 },
+	{ { -1, -1, -1, 1 }, { 0, 1 }, { 0.2f, 1.0f, 1.0f },{0,0,1}, 1 },
+	{ { -1,  1, -1, 1 }, { 1, 1 }, { 1.0f, 0.3f, 0.3f },{0,0,1}, 1 },
+	{ {  1,  1, -1, 1 }, { 1, 0 }, { 0.2f, 1.0f, 0.3f }, {1,0,0},1 },
 };
 
 void draw_plane(device_t *device, int a, int b, int c, int d) {
@@ -962,16 +1177,19 @@ void draw_box(device_t *device, float theta) {
 	matrix_set_rotate(&m, 0, 0, 1, theta);
 	device->transform.world = m;
 	transform_update(&device->transform);
-	draw_plane(device, 0, 1, 2, 3);
-	draw_plane(device, 4, 5, 6, 7);
-	draw_plane(device, 0, 4, 5, 1);
-	draw_plane(device, 1, 5, 6, 2);
-	draw_plane(device, 2, 6, 7, 3);
+	//draw_plane(device, 0, 1, 2, 3);
+	//draw_plane(device, 4, 5, 6, 7);
+	//draw_plane(device, 0, 4, 5, 1);
+	//draw_plane(device, 1, 5, 6, 2);
+	//draw_plane(device, 2, 6, 7, 3);
 	draw_plane(device, 3, 7, 4, 0);
 }
 
 void camera_at_zero(device_t *device, float x, float y, float z) {
 	point_t eye = { x, y, z, 1 }, at = { 0, 0, 0, 1 }, up = { 0, 0, 1, 1 };
+	device->CameraPos.x = 5;
+	device->CameraPos.y = 1;
+	device->CameraPos.z = 2;
 	matrix_set_lookat(&device->transform.view, &eye, &at, &up);
 	transform_update(&device->transform);
 }
