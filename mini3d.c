@@ -374,7 +374,7 @@ void matrix_inverse(matrix_t *dest, const matrix_t* origin)
 	det = src[0] * dest->m[0][0] + src[1] * dest->m[0][1] + src[2] * dest->m[0][2] + src[3] * dest->m[0][3];
 	/* calculate matrix inverse */
 	det = 1.0f / det;
-	matrix_scale(&dest, &dest, det);
+	matrix_scale(dest, dest, det);
 }
 
 //矩阵的转�
@@ -512,8 +512,8 @@ void vertex_rhw_init(vertex_t *v) {
 //顶点法向量变换矩阵逆矩阵的转置
 void vertex_normal_transform(vertex_t * v, matrix_t * transform)
 {
-	matrix_transpose(&transform);
-	matrix_apply(&v->normal, &v->normal, &transform);
+	matrix_transpose(transform);
+	matrix_apply(&v->normal, &v->normal, transform);
 }
 
 void vertex_interp(vertex_t *y, const vertex_t *x1, const vertex_t *x2, float t) {
@@ -911,12 +911,12 @@ int color_add(int col1, int col2)
 
 int blinPhong(const vertex_t *vertex, const light_t* light, const device_t* device, int albedo)
 {
-	vector_t* wPos;
-	vector_t* lDir;
-	vector_t* vDir;
+	vector_t wPos;
+	vector_t lDir;
+	vector_t vDir;
 	transform_homogenize_reverse(&wPos, &vertex->pos, device->width, device->height);
 	matrix_apply(&wPos, &wPos, &device->transform.vp_reverse);
-	vector_t* half;
+	vector_t half;
 	vector_sub(&lDir, &light->position, &wPos);
 	point_t x = device->CameraPos;
 	vector_t y = device->CameraPos;
@@ -1040,8 +1040,8 @@ void device_draw_primitive(device_t *device, const vertex_t *v1,
 
 		t3.pos.w = c3.w;
 		
-		//法向量变�
-		matrix_t * inverse;
+		//法向量变换
+		matrix_t inverse;
 		matrix_inverse(&inverse, &device->transform.world);
 		vertex_normal_transform(&t1, &inverse);
 		vertex_normal_transform(&t2, &inverse);
