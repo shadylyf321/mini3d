@@ -32,7 +32,6 @@ typedef struct { float x, y, z, w; } vector_t;
 typedef vector_t point_t;
 
 int CMID(int x, int min, int max) { return (x < min)? min : ((x > max)? max : x); }
-
 // 计算插值：t �[0, 1] 之间的数�
 float interp(float x1, float x2, float t) { return x1 + (x2 - x1) * t; }
 
@@ -472,7 +471,7 @@ typedef struct
 } light_t;
 
 light_t Light = {
-	{5,1,2,1},
+	{2,1,2,1},
 	{255, 255, 255}
 };
 
@@ -512,7 +511,6 @@ void vertex_rhw_init(vertex_t *v) {
 //顶点法向量变换矩阵逆矩阵的转置
 void vertex_normal_transform(vertex_t * v, matrix_t * transform)
 {
-	matrix_transpose(transform);
 	matrix_apply(&v->normal, &v->normal, transform);
 }
 
@@ -538,6 +536,9 @@ void vertex_division(vertex_t *y, const vertex_t *x1, const vertex_t *x2, float 
 	y->color.r = (x2->color.r - x1->color.r) * inv;
 	y->color.g = (x2->color.g - x1->color.g) * inv;
 	y->color.b = (x2->color.b - x1->color.b) * inv;
+	/*y->normal.x = (x2->normal.x - x1->normal.x) * inv;
+	y->normal.y = (x2->normal.y - x1->normal.y) * inv;
+	y->normal.z = (x2->normal.z - x1->normal.z) * inv;*/
 	y->rhw = (x2->rhw - x1->rhw) * inv;
 }
 
@@ -863,9 +864,9 @@ IUINT32 device_texture_read(const device_t *device, float u, float v) {
 
 int color2int(const color_t col)
 {
-	return (int)(col.r * 255) << 16 |
-		(int)(col.g * 255) << 8 |
-		(int)(col.b * 255);
+	return (int)(col.r) << 16 |
+		(int)(col.g) << 8 |
+		(int)(col.b);
 }
 
 int color_mul(int col1, int col2)
@@ -918,7 +919,8 @@ int blinPhong(const vertex_t *vertex, const light_t* light, const device_t* devi
 	matrix_apply(&wPos, &wPos, &device->transform.vp_reverse);
 	vector_t half;
 	vector_sub(&lDir, &light->position, &wPos);
-	point_t x = device->CameraPos;
+	float dist2Light = sqrt(vector_dotproduct(&lDir, &lDir));
+	point_t x = device->CameraPos; 
 	vector_t y = device->CameraPos;
 	vector_sub(&vDir, &device->CameraPos, &wPos);
 	vector_normalize(&lDir);
@@ -928,11 +930,24 @@ int blinPhong(const vertex_t *vertex, const light_t* light, const device_t* devi
 	float specular = 2;
 	float gloss = 1;
 	float diff = vector_dotproduct(&lDir, &vertex->normal);
+	diff = diff < 0 ? 0 : diff;
+	int debugdiff = diff * 255;
+	int debugNx = vertex->normal.x * 255;
+	int debugNy = vertex->normal.y * 255;
+	int debugNz = abs(vertex->normal.z * 255);
+	int debugLx = lDir.x * 255;
+	int debugLy = lDir.y * 255;
+	int debugLz = lDir.z * 255;
+	//return (debugLx << 16) | (debugLy << 8) | debugLx;
+	//return (debugNx << 16) | (debugNy << 8) | debugNz;
+	//return (debugdiff << 16) | (debugdiff << 8) | debugdiff;
 	float nh = vector_dotproduct(&half, &vertex->normal);
 	float spec = pow(nh, specular) * gloss;
 	//rgb = albeda * lightColor * diff + lightColor * spec
-	int diffcol = color_mul(albedo, color2int(light->color));
-	int speccol = color_mul2(color2int(light->color), spec);
+	int attenColor = color_mul2(color2int(light->color), 2 / (dist2Light * dist2Light));
+	int diffcol = color_mul2(color_mul(albedo, attenColor), diff);
+	//return diffcol;
+	int speccol = color_mul2(attenColor, spec);
 	return color_add(diffcol, speccol);
 }
 
@@ -990,7 +1005,7 @@ void device_render_trap(device_t *device, trapezoid_t *trap) {
 	bottom = (int)(trap->bottom + 0.5f);
 	for (j = top; j < bottom; j++) {
 		if (j >= 0 && j < device->height) {
-			trapezoid_edge_interp(trap, (float)j + 0.5f);
+ 			trapezoid_edge_interp(trap, (float)j + 0.5f);
 			trapezoid_init_scan_line(trap, &scanline, j);
 			device_draw_scanline(device, &scanline);
 		}
@@ -1043,6 +1058,7 @@ void device_draw_primitive(device_t *device, const vertex_t *v1,
 		//法向量变换
 		matrix_t inverse;
 		matrix_inverse(&inverse, &device->transform.world);
+		matrix_transpose(&inverse);
 		vertex_normal_transform(&t1, &inverse);
 		vertex_normal_transform(&t2, &inverse);
 		vertex_normal_transform(&t3, &inverse);
@@ -1200,14 +1216,16 @@ void screen_update(void) {
 // 主程�
 //=====================================================================
 vertex_t mesh[8] = {
-	{ {  1, -1,  1, 1 }, { 0, 0 }, { 1.0f, 0.2f, 0.2f },{1,0,0}, 1 },
-	{ { -1, -1,  1, 1 }, { 0, 1 }, { 0.2f, 1.0f, 0.2f },{0,0,1},1 },
-	{ { -1,  1,  1, 1 }, { 1, 1 }, { 0.2f, 0.2f, 1.0f },{0,0,1},1 },
-	{ {  1,  1,  1, 1 }, { 1, 0 }, { 1.0f, 0.2f, 1.0f },{1,0,0},1 },
-	{ {  1, -1, -1, 1 }, { 0, 0 }, { 1.0f, 1.0f, 0.2f },{1,0,0}, 1 },
-	{ { -1, -1, -1, 1 }, { 0, 1 }, { 0.2f, 1.0f, 1.0f },{0,0,1}, 1 },
-	{ { -1,  1, -1, 1 }, { 1, 1 }, { 1.0f, 0.3f, 0.3f },{0,0,1}, 1 },
-	{ {  1,  1, -1, 1 }, { 1, 0 }, { 0.2f, 1.0f, 0.3f }, {1,0,0},1 },
+	//front
+	{ { 1,  1,  1, 1 },{ 0, 1 },{ 1.0f, 0.2f, 1.0f },{ 1,0,0 },1 },
+	{ { 1,  1, -1, 1 },{ 0, 0 },{ 0.2f, 1.0f, 0.3f },{ 1,0,0 },1 },
+	{ { 1, -1, -1, 1 },{ 1, 0 },{ 1.0f, 1.0f, 0.2f },{ 1,0,0 }, 1 },
+	{ { 1, -1,  1, 1 }, { 1, 1 }, { 1.0f, 0.2f, 0.2f },{1,0,0}, 1 },
+	//up
+	{ { 1,  1,  1, 1 },{ 0, 0 },{ 1.0f, 0.2f, 1.0f },{ 0,0,1 },1 },
+	{ { 1,  -1, 1, 1 },{ 1, 0 },{ 0.2f, 1.0f, 0.3f },{ 0,0,1 },1 },
+	{ { -1, -1, 1, 1 },{ 1, 1 },{ 1.0f, 1.0f, 0.2f },{ 0,0,1 }, 1 },
+	{ { -1, 1,  1, 1 },{ 0, 1 },{ 1.0f, 0.2f, 0.2f },{ 0,0,1 }, 1 },
 };
 
 void draw_plane(device_t *device, int a, int b, int c, int d) {
@@ -1220,15 +1238,11 @@ void draw_plane(device_t *device, int a, int b, int c, int d) {
 
 void draw_box(device_t *device, float theta) {
 	matrix_t m;
-	matrix_set_rotate(&m, 0, 0, 1, theta);
+	matrix_set_rotate(&m, 0, 1, 0, theta);
 	device->transform.world = m;
 	transform_update(&device->transform);
-	/*draw_plane(device, 0, 1, 2, 3);
+	draw_plane(device, 0, 1, 2, 3);
 	draw_plane(device, 4, 5, 6, 7);
-	draw_plane(device, 0, 4, 5, 1);
-	draw_plane(device, 1, 5, 6, 2);
-	draw_plane(device, 2, 6, 7, 3);*/
-	draw_plane(device, 3, 7, 4, 0);
 }
 
 void camera_at_zero(device_t *device, float x, float y, float z) {
